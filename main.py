@@ -124,7 +124,7 @@ def display_end_screen(score):
 
 def play_pose_game():
     while True:
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(1)
         
         # Set camera resolution to 1920x1080
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
