@@ -5,7 +5,10 @@ import os
 import time
 from sklearn.metrics.pairwise import cosine_similarity
 import winsound  # For sound playback on Windows
+import pygame
 
+
+pygame.mixer.init()
 # Initialize Mediapipe Pose model
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
@@ -34,6 +37,13 @@ key_landmarks_indices = [
     mp_pose.PoseLandmark.RIGHT_ANKLE.value
 ]
 
+def play_audio(file_path):
+    """
+    Plays an MP3 file.
+    """
+    pygame.mixer.music.load(file_path)
+    pygame.mixer.music.play()
+
 # Function to extract pose landmarks from an image
 def extract_pose_landmarks(image_path):
     image = cv2.imread(image_path)
@@ -48,6 +58,57 @@ def extract_pose_landmarks(image_path):
             print("Not enough landmarks detected in image.")
             return None
     return None
+
+import cv2
+import os
+
+def add_frame_to_images(input_folder, frame_path, output_folder):
+    """
+    Overlays a frame image on top of all images in a folder and saves the results.
+
+    Parameters:
+    - input_folder: Path to the folder containing input images.
+    - frame_path: Path to the frame image (1280x720).
+    - output_folder: Path to save the edited images.
+    """
+    # Load the frame image
+    frame = cv2.imread(frame_path, cv2.IMREAD_UNCHANGED)  # Load with alpha channel if it exists
+
+    # Ensure the output folder exists
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Process each image in the input folder
+    for filename in os.listdir(input_folder):
+        input_path = os.path.join(input_folder, filename)
+
+        # Skip non-image files
+        if not filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+            continue
+
+        # Load the screenshot
+        screenshot = cv2.imread(input_path)
+        if screenshot is None:
+            print(f"Skipping invalid image file: {filename}")
+            continue
+
+        # Resize screenshot to 1280x720 if needed
+        screenshot = cv2.resize(screenshot, (1280, 720))
+
+        # If the frame has an alpha channel, blend using the alpha mask
+        if frame.shape[2] == 4:  # Check if frame has an alpha channel
+            alpha_channel = frame[:, :, 3] / 255.0
+            for c in range(3):  # Blend each color channel
+                screenshot[:, :, c] = screenshot[:, :, c] * (1 - alpha_channel) + frame[:, :, c] * alpha_channel
+        else:
+            # If no alpha channel, simply overlay the frame
+            screenshot = cv2.addWeighted(screenshot, 1.0, frame, 1.0, 0)
+
+        # Save the edited image to the output folder
+        output_path = os.path.join(output_folder, filename)
+        cv2.imwrite(output_path, screenshot)
+        print(f"Edited image saved to {output_path}")
+
+
 
 def normalize_landmarks(landmarks):
     if landmarks is None:
@@ -83,9 +144,7 @@ def compare_poses(target_pose, current_pose):
 # Function to play a sound when a pose is achieved
 def play_achievement_sound():
     # Play a sound when a pose is achieved
-    duration = 500  # milliseconds
-    frequency = 1000  # Hz
-    winsound.Beep(frequency, duration)
+    play_audio("correct.mp3")
 
 # Function to display pause menu
 def show_pause_menu():
@@ -119,7 +178,8 @@ def display_end_screen(score):
 
     cv2.namedWindow('Pose Tracker', cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty('Pose Tracker', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
+    
+    add_frame_to_images('./screenshot_images', './frame.png', './final_images')
     while True:
         cv2.imshow('Pose Tracker', end_screen)
         key = cv2.waitKey(0) & 0xFF
@@ -154,6 +214,7 @@ def display_start_screen():
 # Function to display a countdown
 def display_countdown():
     countdown_screen = np.zeros((720, 1280, 3), dtype=np.uint8)
+    play_audio('start.mp3')
     for i in range(3, 0, -1):
         countdown_screen.fill(0)
         cv2.putText(countdown_screen, str(i), (600, 360), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 255), 5, cv2.LINE_AA)
@@ -184,6 +245,8 @@ def play_pose_game():
             if action == 'resume':
                 paused = False
             elif action == 'restart':
+                display_start_screen()  # Show the start screen
+                display_countdown()     # Show the countdown
                 score = 0
                 start_time = time.time()
                 current_image_index = 0
@@ -222,7 +285,7 @@ def play_pose_game():
                     hold_start_time = time.time()
                     pose_held = True
                 elif time.time() - hold_start_time >= hold_time:
-                    score += 1
+                    score += 2
                     play_achievement_sound()
                     
                     # Take a screenshot after holding the pose
@@ -237,13 +300,11 @@ def play_pose_game():
             else:
                 pose_held = False  # Reset if pose is not held continuously
 
-        # mp.solutions.drawing_utils.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+        mp.solutions.drawing_utils.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-            # Display the current target pose image in the top right corner
         # Display the current target pose image in the top right corner
         current_pose_img = cv2.imread(pose_image_paths[current_image_index])
         current_pose_img = cv2.resize(current_pose_img, (426, 240))  # Resize to one-third of 1280 x 720
-
         frame_height, frame_width, _ = frame.shape
         frame[0:240, frame_width-426:frame_width] = current_pose_img  # Place in the top right corner
 
@@ -251,9 +312,13 @@ def play_pose_game():
         cv2.imshow('Pose Tracker', overlayed_frame)
         
         key = cv2.waitKey(10) & 0xFF
-        if key == 27:
+        if key == 27:  # 'Esc' key to pause
             paused = True
-       
+        elif key == ord('s'):  # 'S' key to skip pose
+            print("Pose skipped!")
+            current_image_index = (current_image_index + 1) % len(pose_image_paths)
+            target_pose = extract_pose_landmarks(pose_image_paths[current_image_index])
+            pose_held = False
 
     cap.release()
     cv2.destroyAllWindows()
