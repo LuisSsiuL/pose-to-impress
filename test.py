@@ -303,7 +303,7 @@ def play_pose_game():
             else:
                 pose_held = False  # Reset if pose is not held continuously
 
-        mp.solutions.drawing_utils.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+        # mp.solutions.drawing_utils.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
         # Display the current target pose image in the top right corner
         current_pose_img = cv2.imread(pose_image_paths[current_image_index])
@@ -312,7 +312,10 @@ def play_pose_game():
         frame[0:240, frame_width-426:frame_width] = current_pose_img  # Place in the top right corner
 
         overlayed_frame = draw_overlay(frame, score, remaining_time)
+        mp.solutions.drawing_utils.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
         cv2.imshow('Pose Tracker', overlayed_frame)
+
+        cv2.imshow('Camera Feed', frame)
         
         key = cv2.waitKey(10) & 0xFF
         if key == 27:  # 'Esc' key to pause
